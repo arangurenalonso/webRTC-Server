@@ -60,6 +60,7 @@ io.on('connection', (socket: Socket) => {
     socket.emit('room/participants', { participants: newRoom.participants });
   });
   socket.on('room/join', (data) => {
+    console.log('room/join', data);
     const { roomId, participantName } = data;
     const resultValue = joinRoomHandler({
       connectedUsers,
@@ -96,6 +97,8 @@ io.on('connection', (socket: Socket) => {
     });
   });
   socket.on('webRTC/confirm-connection', (data) => {
+    console.log('webRTC/confirm-connection', data);
+
     const { offerer } = data;
 
     const initData = {
