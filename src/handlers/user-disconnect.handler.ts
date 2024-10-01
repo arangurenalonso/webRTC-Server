@@ -1,10 +1,26 @@
-const handleUserDisconnect = (connectedUsers, rooms, socket, io) => {
+import { ConnectedUserType, JoinRoomResponse, RoomType } from '@src/types';
+import { Server, Socket } from 'socket.io';
+
+const handleUserDisconnect = ({
+  connectedUsers,
+  rooms,
+  io,
+  socket,
+}: {
+  connectedUsers: ConnectedUserType[];
+  rooms: RoomType[];
+  io: Server;
+  socket: Socket;
+}): JoinRoomResponse => {
   // Encontrar al usuario desconectado en la lista de usuarios conectados
   const userIndex = connectedUsers.findIndex(
     (user) => user.socketId === socket.id
   );
   if (userIndex === -1) {
-    return { connectedUsers, rooms };
+    return {
+      isOk: false,
+      msg: `user dosen't existe in the room`,
+    };
   }
   const user = connectedUsers[userIndex];
   const roomId = user.roomId;
@@ -19,12 +35,12 @@ const handleUserDisconnect = (connectedUsers, rooms, socket, io) => {
 
   if (room) {
     // Remover al usuario de la lista de usuarios conectados al room
-    room.connectedUsers =
-      room?.connectedUsers?.filter((u) => u.socketId !== socket.id) || [];
+    room.participants =
+      room?.participants?.filter((u) => u.socketId !== socket.id) || [];
     socket.leave(roomId);
 
     // Verificar si el room está vacío
-    if (room.connectedUsers.length === 0) {
+    if (room.participants.length === 0) {
       // Si no hay usuarios conectados, eliminar el room
       rooms = rooms.filter((r) => r.id !== roomId);
 
@@ -35,19 +51,18 @@ const handleUserDisconnect = (connectedUsers, rooms, socket, io) => {
         socketIdUserDisconnected: socket.id,
       });
       // Si aún hay usuarios en el room, notificar a los demás usuarios
-      const roomParticipants = {
-        roomId,
-        connectedUsers: room.connectedUsers.map((u) => ({
-          name: u.identity,
-          id: u.id,
-        })),
-      };
-
-      io.to(roomId).emit('room-participants', roomParticipants);
+      io.to(roomId).emit('room/participants', {
+        participants: room.participants,
+      });
     }
   }
-  console.log('connectedUsers', connectedUsers);
 
-  return { connectedUsers, rooms };
+  return {
+    isOk: true,
+    result: {
+      updatedConnectedUsers: updatedConnectedUsers,
+      updatedRoom: rooms,
+    },
+  };
 };
-module.exports = handleUserDisconnect;
+export default handleUserDisconnect;
