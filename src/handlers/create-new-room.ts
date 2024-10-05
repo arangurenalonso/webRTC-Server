@@ -24,6 +24,7 @@ const createNewRoom = ({
 
   const newRoom: RoomType = {
     id: roomId,
+    chat: [],
     participants: [newUser],
   };
 

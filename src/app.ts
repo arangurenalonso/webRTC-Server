@@ -1,11 +1,12 @@
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
-import { ConnectedUserType, RoomType } from './types';
+import { ConnectedUserType, MessageType, RoomType } from './types';
 import { Server, Socket } from 'socket.io';
 import createNewRoom from './handlers/create-new-room';
 import joinRoomHandler from './handlers/joinRoom.handler';
 import handleUserDisconnect from './handlers/user-disconnect.handler';
+import createNewMessage from './handlers/create-new-message';
 
 const PORT = process.env.PORT || 5002;
 
@@ -43,7 +44,8 @@ const io = new Server(server, {
 io.on('connection', (socket: Socket) => {
   console.log(`A user connected: ${socket.id}`);
   socket.on('room/create', ({ userName }: { userName: string }) => {
-    console.log('room/create', userName);
+    console.log('room/create');
+    console.log('roms', rooms);
 
     const { newRoom, updatedConnectedUsers, updatedRooms } = createNewRoom({
       connectedUsers,
@@ -60,7 +62,7 @@ io.on('connection', (socket: Socket) => {
     socket.emit('room/participants', { participants: newRoom.participants });
   });
   socket.on('room/join', (data) => {
-    console.log('room/join', data);
+    console.log('room/join');
     const { roomId, participantName } = data;
     const resultValue = joinRoomHandler({
       connectedUsers,
@@ -81,10 +83,12 @@ io.on('connection', (socket: Socket) => {
     socket.join(roomId);
     socket.emit('room/join', { roomId });
     const room = rooms.find((room) => room.id === roomId);
-    console.log('room', room);
 
     io.to(roomId).emit('room/participants', {
       participants: room?.participants || [],
+    });
+    socket.emit('chat/messages', {
+      messages: room?.chat || [],
     });
     //Emit to all user which are already in this room to prepare peer connection
     room?.participants.forEach((user) => {
@@ -96,8 +100,23 @@ io.on('connection', (socket: Socket) => {
       }
     });
   });
+  socket.on('room/leave', () => {
+    console.log('room/leave');
+    const result = handleUserDisconnect({
+      connectedUsers,
+      rooms,
+      io,
+      socket,
+    });
+    if (!result.isOk) {
+      return;
+    }
+    const { updatedConnectedUsers, updatedRoom } = result.result;
+    connectedUsers = updatedConnectedUsers;
+    rooms = updatedRoom;
+  });
   socket.on('webRTC/confirm-connection', (data) => {
-    console.log('webRTC/confirm-connection', data);
+    console.log('webRTC/confirm-connection');
 
     const { offerer } = data;
 
@@ -120,7 +139,30 @@ io.on('connection', (socket: Socket) => {
     };
     io.to(peerSocketId).emit('webRTC/signal-exchange', signalingData);
   });
+  socket.on('chat/new-message', (data) => {
+    console.log('chat/new-message');
+    const resultValue = createNewMessage({
+      connectedUsers,
+      rooms,
+      socketId: socket.id,
+      message: data.message,
+    });
+
+    if (!resultValue.isOk) {
+      socket.emit('chat/new-message-error', { msg: resultValue.msg });
+      return;
+    }
+    const { updatedRoom, roomId, newMessage } = resultValue.result;
+
+    rooms = updatedRoom;
+    io.to(roomId).emit('chat/new-message', {
+      message: newMessage,
+    });
+  });
+
   socket.on('disconnect', () => {
+    console.log('disconnect');
+
     const result = handleUserDisconnect({
       connectedUsers,
       rooms,
